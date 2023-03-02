@@ -1,0 +1,8 @@
+Order of landmarks:
+
+0. % baza desnega sinusa
+1. % baza levega sinusa
+2. % baza nekoronarnega sinusa (ne izhaja arterija)
+3. RLC % komisura med desnim in levim
+4. RNC % komisura med R in N
+5. LNC % komisura med L in N
