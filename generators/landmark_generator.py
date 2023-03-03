@@ -66,17 +66,17 @@ class LandmarkGeneratorBase(TransformationGeneratorBase):
         :return: True, if all conditions hold.
         """
         if not landmark.is_valid:
-            print("Landmark is not valid: ")
+            # print("Landmark is not valid: ")
             return False
         if not np.all(landmark.coords >= 0):
-            print("Landmark coords <= 0: ")
+            # print("Landmark coords <= 0: ")
             return False
         if output_size is not None:
             for i in range(self.dim):
                 if output_size[i] is not None and landmark.coords[i] >= output_size[i]:
-                    print("Landmark is out of size: ")
+                    # print("Landmark is out of size: ")
                     return False
-        print("Landmark is valid: ")
+        # print("Landmark is valid: ")
         return True
 
     def flip_landmarks(self, landmarks, flip):

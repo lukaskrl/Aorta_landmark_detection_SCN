@@ -58,9 +58,9 @@ class Dataset(object):
         self.translate_by_random_factor = translate_by_random_factor
         self.smoothing_sigma = smoothing_sigma
         self.dim = 3
-        self.image_base_folder = os.path.join("data")
+        self.image_base_folder = os.path.join("data/dataOrigin")
         self.setup_base_folder = os.path.join(self.base_folder, 'aorta_setup')
-        self.point_list_file_name = os.path.join(self.base_folder, 'aorta_setup/points_world_cor.csv')
+        self.point_list_file_name = os.path.join(self.base_folder, 'aorta_setup/TransformedCor.csv')
         if cv == -1:
             self.train_id_list_file_name = os.path.join(self.setup_base_folder, 'train_all.txt')
             self.val_id_list_file_name = os.path.join(self.setup_base_folder, 'test_all.txt')
@@ -68,7 +68,7 @@ class Dataset(object):
             self.train_id_list_file_name = os.path.join(self.setup_base_folder, 'cv', str(cv), 'train.txt')
             self.val_id_list_file_name = os.path.join(self.setup_base_folder, 'cv', str(cv), 'val.txt')
 
-    def data_sources(self, iterator, cached, use_landmarks=True, image_extension='.nii'):
+    def data_sources(self, iterator, cached, use_landmarks=True, image_extension='.nii.gz'):
         """
         Returns the data sources that load data.
         {

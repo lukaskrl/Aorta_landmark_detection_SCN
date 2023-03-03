@@ -34,9 +34,9 @@ class MainLoop(MainLoopBase):
             self.output_folder += '_cv{}'.format(cv)
         self.output_folder += '/' + self.output_folder_timestamp()
         self.batch_size = 1
-        learning_rates = {'scn': 0.00000005,
-                          'unet': 0.000000005}
-        max_iters = {'scn': 40000,
+        learning_rates = {'scn': 0.000000005,
+                          'unet': 0.000000000001}
+        max_iters = {'scn': 80000,
                      'unet': 80000}
         self.learning_rate = learning_rates[self.network_id]
         self.max_iter = max_iters[self.network_id]
@@ -50,16 +50,16 @@ class MainLoop(MainLoopBase):
         self.sigma_scale = 1000
         self.invert_transformation = False
         self.num_landmarks = 6
-        self.image_size = [96, 96, 152]
-        self.image_spacing = [1, 1, 1] # [2, 2, 2]
+        self.image_size = [128, 128, 128]
+        self.image_spacing = [0.6, 0.6, 0.6] # [2, 2, 2]
         self.heatmap_size = self.image_size
         self.image_channels = 1
-        self.heatmap_sigma = 4
+        self.heatmap_sigma = 2
         self.data_format = 'channels_first'
         self.save_debug_images = True
         self.base_folder = 'aorta/SCN/aorta_dataset'
         self.generate_landmarks = True
-        self.cropped_training = True
+        self.cropped_training = False
         self.cropped_inc = [0, 64, 0, 0]
         if self.cropped_training:
             dataset = Dataset(self.image_size,
@@ -262,7 +262,7 @@ class MainLoop(MainLoopBase):
 if __name__ == '__main__':
     # TODO: if the loss gets 'nan', either restart the network training or reduce the learning rate
     # change networks
-    networks = ['scn', 'unet']
+    networks = ['scn']
     for network in networks:
         # cv 0, 1 for cross validation
         # cv -1 for training on full training set and testing on test set

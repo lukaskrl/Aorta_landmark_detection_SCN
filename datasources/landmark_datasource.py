@@ -12,7 +12,7 @@ class LandmarkDataSource(DataSourceBase):
                  point_list_file_name,
                  num_points,
                  dim,
-                 silent_not_found=False,
+                 silent_not_found=True,
                  *args, **kwargs):
         """
         Initializer.
@@ -74,7 +74,7 @@ class LandmarkDataSourceMultiple(DataSourceBase):
                  num_points,
                  dim,
                  multiple,
-                 silent_not_found=False,
+                 silent_not_found=True,
                  id_dict_preprocessing=None):
         """
         Initializer.
