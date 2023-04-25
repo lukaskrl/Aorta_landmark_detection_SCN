@@ -113,7 +113,7 @@ class Dataset(object):
                                                        self.image_spacing,
                                                        post_processing_np=image_post_processing_np,
                                                        interpolator='linear',
-                                                       resample_default_pixel_value=-3024,
+                                                       resample_default_pixel_value=-1024,
                                                        data_format=self.data_format,
                                                        name='image',
                                                        parents=[image_datasource, transformation])

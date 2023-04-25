@@ -26,3 +26,5 @@ for idx, file in enumerate(os.listdir(path_to_all_nifti)):
     image.SetDirection([1, 0, 0, 0, 1, 0, 0, 0, 1])
     sitk.WriteImage(image, path_to_save + '.nii.gz')
 
+
+

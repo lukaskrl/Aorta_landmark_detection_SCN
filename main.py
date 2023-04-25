@@ -22,7 +22,7 @@ from tensorflow_train.utils.summary_handler import create_summary_placeholder
 from dataset import Dataset
 from network import network_scn, network_unet
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 class MainLoop(MainLoopBase):
     def __init__(self, cv, network_id):
@@ -34,7 +34,7 @@ class MainLoop(MainLoopBase):
             self.output_folder += '_cv{}'.format(cv)
         self.output_folder += '/' + self.output_folder_timestamp()
         self.batch_size = 1
-        learning_rates = {'scn': 0.000000005,
+        learning_rates = {'scn': 0.000000001,
                           'unet': 0.000000000001}
         max_iters = {'scn': 80000,
                      'unet': 80000}
@@ -60,7 +60,7 @@ class MainLoop(MainLoopBase):
         self.base_folder = 'aorta/SCN/aorta_dataset'
         self.generate_landmarks = True
         self.cropped_training = False
-        self.cropped_inc = [0, 64, 0, 0]
+        self.cropped_inc = [0, 0, 0, 0]
         if self.cropped_training:
             dataset = Dataset(self.image_size,
                               self.image_spacing,
