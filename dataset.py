@@ -62,8 +62,8 @@ class Dataset(object):
         self.setup_base_folder = os.path.join(self.base_folder, 'aorta_setup')
         self.point_list_file_name = os.path.join(self.base_folder, 'aorta_setup/TransformedCor.csv')
         if cv == -1:
-            self.train_id_list_file_name = os.path.join(self.setup_base_folder, 'train_all.txt')
-            self.val_id_list_file_name = os.path.join(self.setup_base_folder, 'test_all.txt')
+            self.train_id_list_file_name = os.path.join(self.setup_base_folder, 'train_25.txt')
+            self.val_id_list_file_name = os.path.join(self.setup_base_folder, 'test_25.txt')
         else:
             self.train_id_list_file_name = os.path.join(self.setup_base_folder, 'cv', str(cv), 'train.txt')
             self.val_id_list_file_name = os.path.join(self.setup_base_folder, 'cv', str(cv), 'val.txt')
