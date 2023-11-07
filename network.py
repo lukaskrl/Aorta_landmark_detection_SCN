@@ -43,9 +43,10 @@ class SCNetLocal(UnetBase):
 
 def network_scn(input, num_heatmaps, is_training, data_format='channels_first'):
     num_filters_base = 64
-    activation = lambda x, name: tf.nn.leaky_relu(x, name=name, alpha=0.1)
+    def activation(x, name): return tf.nn.leaky_relu(x, name=name, alpha=0.1)
     padding = 'reflect'
-    heatmap_layer_kernel_initializer = tf.compat.v1.truncated_normal_initializer(stddev=0.001)
+    heatmap_layer_kernel_initializer = tf.compat.v1.truncated_normal_initializer(
+        stddev=0.001)
     downsampling_factor = 8
     node = conv3d(input,
                   filters=num_filters_base,
@@ -60,7 +61,7 @@ def network_scn(input, num_heatmaps, is_training, data_format='channels_first'):
                              normalization=None,
                              activation=activation,
                              data_format=data_format,
-                                      padding=padding)
+                             padding=padding)
     unet_out = scnet_local(node, is_training)
     local_heatmaps = conv3d(unet_out,
                             filters=num_heatmaps,
@@ -70,12 +71,18 @@ def network_scn(input, num_heatmaps, is_training, data_format='channels_first'):
                             activation=None,
                             data_format=data_format,
                             is_training=is_training)
-    downsampled = avg_pool3d(local_heatmaps, [downsampling_factor] * 3, name='local_downsampled', data_format=data_format)
-    conv = conv3d(downsampled, filters=num_filters_base, kernel_size=[7, 7, 7], name='sconv0', activation=activation, data_format=data_format, is_training=is_training, padding=padding)
-    conv = conv3d(conv, filters=num_filters_base, kernel_size=[7, 7, 7], name='sconv1', activation=activation, data_format=data_format, is_training=is_training, padding=padding)
-    conv = conv3d(conv, filters=num_filters_base, kernel_size=[7, 7, 7], name='sconv2', activation=activation, data_format=data_format, is_training=is_training, padding=padding)
-    conv = conv3d(conv, filters=num_heatmaps, kernel_size=[7, 7, 7], name='spatial_downsampled', kernel_initializer=heatmap_layer_kernel_initializer, activation=tf.nn.tanh, data_format=data_format, is_training=is_training, padding=padding)
-    spatial_heatmaps = upsample3d_cubic(conv, [downsampling_factor] * 3, name='spatial_heatmaps', data_format=data_format, padding='valid_cropped')
+    downsampled = avg_pool3d(local_heatmaps, [
+                             downsampling_factor] * 3, name='local_downsampled', data_format=data_format)
+    conv = conv3d(downsampled, filters=num_filters_base, kernel_size=[
+                  7, 7, 7], name='sconv0', activation=activation, data_format=data_format, is_training=is_training, padding=padding)
+    conv = conv3d(conv, filters=num_filters_base, kernel_size=[
+                  7, 7, 7], name='sconv1', activation=activation, data_format=data_format, is_training=is_training, padding=padding)
+    conv = conv3d(conv, filters=num_filters_base, kernel_size=[
+                  7, 7, 7], name='sconv2', activation=activation, data_format=data_format, is_training=is_training, padding=padding)
+    conv = conv3d(conv, filters=num_heatmaps, kernel_size=[7, 7, 7], name='spatial_downsampled', kernel_initializer=heatmap_layer_kernel_initializer,
+                  activation=tf.nn.tanh, data_format=data_format, is_training=is_training, padding=padding)
+    spatial_heatmaps = upsample3d_cubic(
+        conv, [downsampling_factor] * 3, name='spatial_heatmaps', data_format=data_format, padding='valid_cropped')
 
     heatmaps = local_heatmaps * spatial_heatmaps
 
@@ -93,19 +100,20 @@ def network_unet(input, num_heatmaps, is_training, data_format='channels_first')
                   data_format=data_format,
                   is_training=is_training)
     scnet_local = UnetClassic3D(num_filters_base=num_filters_base,
-                             num_levels=5,
-                             double_filters_per_level=False,
-                             normalization=None,
-                             activation=activation,
-                             data_format=data_format)
+                                num_levels=5,
+                                double_filters_per_level=False,
+                                normalization=None,
+                                activation=activation,
+                                data_format=data_format)
     unet_out = scnet_local(node, is_training)
     heatmaps = conv3d(unet_out,
-                            filters=num_heatmaps,
-                            kernel_size=[3, 3, 3],
-                            name='heatmaps',
-                            kernel_initializer=tf.compat.v1.truncated_normal_initializer(stddev=0.0001),
-                            activation=None,
-                            data_format=data_format,
-                            is_training=is_training)
+                      filters=num_heatmaps,
+                      kernel_size=[3, 3, 3],
+                      name='heatmaps',
+                      kernel_initializer=tf.compat.v1.truncated_normal_initializer(
+                          stddev=0.0001),
+                      activation=None,
+                      data_format=data_format,
+                      is_training=is_training)
 
     return heatmaps, heatmaps, heatmaps

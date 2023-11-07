@@ -34,7 +34,7 @@ class MainLoop(MainLoopBase):
             self.output_folder += '_cv{}'.format(cv)
         self.output_folder += '/' + self.output_folder_timestamp()
         self.batch_size = 1
-        learning_rates = {'scn': 0.000000001,
+        learning_rates = {'scn': 0.00000001,
                           'unet': 0.000000000001}
         max_iters = {'scn': 80000,
                      'unet': 80000}
@@ -51,7 +51,7 @@ class MainLoop(MainLoopBase):
         self.invert_transformation = False
         self.num_landmarks = 6
         self.image_size = [128, 128, 128]
-        self.image_spacing = [0.6, 0.6, 0.6] # [2, 2, 2]
+        self.image_spacing = [1, 1, 1] # [2, 2, 2]
         self.heatmap_size = self.image_size
         self.image_channels = 1
         self.heatmap_sigma = 2
@@ -59,8 +59,9 @@ class MainLoop(MainLoopBase):
         self.save_debug_images = True
         self.base_folder = 'aorta/SCN/aorta_dataset'
         self.generate_landmarks = True
+        # self.load_model_filename = "scn/2023-07-27_06-42-17_best/weights/model-80000"
         self.cropped_training = False
-        self.cropped_inc = [0, 0, 0, 0]
+        self.cropped_inc = [0, 64, 0, 0]
         if self.cropped_training:
             dataset = Dataset(self.image_size,
                               self.image_spacing,
@@ -235,7 +236,7 @@ class MainLoop(MainLoopBase):
                 image, heatmaps, heatmap_transform = self.test_full_image(dataset_entry)
             else:
                 image, heatmaps, heatmap_transform = self.test_cropped_image(dataset_entry)
-
+            print("heatmap size: " + str(heatmaps.shape))
             utils.io.image.write_np(ShiftScaleClamp(scale=255, clamp_min=0, clamp_max=255)(heatmaps).astype(np.uint8),
                                     self.output_file_for_current_iteration(current_id + '_heatmaps.mha'))
             utils.io.image.write_np(image, self.output_file_for_current_iteration(current_id + '_image.mha'))
