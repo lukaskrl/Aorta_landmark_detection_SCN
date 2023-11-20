@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from CNNTesting.dataset import *
 from CNNTesting.parts import *
 import math
-
+import numpy as np
 #%% functions
 
 def getContourPoints(point_start, point_end, contour_array, search_radious = 10):
@@ -88,7 +88,7 @@ def getCircumscribedCircle(points):
     
     return circumference 
 
-def rotateImageToPlane(input_image, points):
+def rotateImageToPlane(input_image, points, normalize = False):
     normal = np.cross(points[0]-points[1], points[0]-points[2])
     normal = normal / np.linalg.norm(normal)
     # calculate axis  and angle for versor rotation
@@ -101,6 +101,11 @@ def rotateImageToPlane(input_image, points):
     versor.SetRotation(axis, angle)
     versor.SetCenter(points[0])
     resampled_image = sitk.Resample(input_image, versor.GetInverse(), sitk.sitkLinear, 0.0, input_image.GetPixelID())
+    
+    # normalize image
+    if normalize:
+        resampled_image = sitk.Normalize(resampled_image)
+    
     
     transformed_indexs = []
     for point in points:
@@ -136,7 +141,7 @@ def getContourLength(input_image, points, show_steps=False):
     mean_value = np.median(mean_values)
     max_value = np.max(image_slice)
     min_value = np.min(image_slice)
-    offset = (max_value - min_value)*0.1
+    offset = (max_value - min_value)*0.05
     
     upper_binary_treshold = mean_value + offset
     lower_binary_treshold = mean_value - offset
@@ -236,7 +241,7 @@ def getContourLength(input_image, points, show_steps=False):
      
 def getCuspHeightGH(input_image, points, show_steps=False): 
 
-    resampled_image, transformed_indexs, versor = rotateImageToPlane(input_image, points)
+    resampled_image, transformed_indexs, versor = rotateImageToPlane(input_image, points, normalize=True)
    
     image_slice = sitk.GetArrayFromImage(resampled_image)[:,transformed_indexs[0][1],:]
     # image_slice in z x space
@@ -245,23 +250,33 @@ def getCuspHeightGH(input_image, points, show_steps=False):
     
     # itk back to x z space
     mean_index = np.flip(transformed_indexs[1])
+    print(mean_index)
     transformed_indexs = np.delete(transformed_indexs, 1, axis=1)
 
     # slice in z x space, but index now also fliped to z x
     mean_values = getKernelValuesAroundIndex(image_slice, mean_index[[0,2]])
     
-    mean_value = np.median(mean_values)
-    max_value = np.max(image_slice)
-    min_value = np.min(image_slice)
-    offset = (max_value - min_value)*0.1
+    # mean_value = np.mean(mean_values)
+    # max_value = np.max(image_slice)
+    # min_value = np.min(image_slice)
+    # offset = (max_value - min_value)*0.05
+    # print(mean_value, max_value, min_value, offset)
     
-    upper_binary_treshold = mean_value + offset
-    lower_binary_treshold = mean_value - offset
+    mean_value = np.median(mean_values)
+    max_value = np.max(mean_values)
+    min_value = np.min(mean_values)
+    offset = (max_value - min_value)*0.05
+    print(mean_value, max_value, min_value, offset)
+    
+    upper_binary_treshold = max_value*2
+    lower_binary_treshold = min_value*0.9
+    # upper_binary_treshold = mean_value + offset
+    # lower_binary_treshold = mean_value - offset
     
     # binary treshold image filter
     binary_filter = sitk.BinaryThresholdImageFilter()
-    binary_filter.SetLowerThreshold(int(lower_binary_treshold))
-    binary_filter.SetUpperThreshold(int(upper_binary_treshold))
+    binary_filter.SetLowerThreshold(lower_binary_treshold)
+    binary_filter.SetUpperThreshold(upper_binary_treshold)
     binary_filter.SetInsideValue(1)
     binary_filter.SetOutsideValue(0)
     binary_image = binary_filter.Execute(itk_image_slice)
@@ -317,7 +332,7 @@ def getCuspHeightGH(input_image, points, show_steps=False):
         plt.scatter(transformed_indexs[1][0], transformed_indexs[1][1], c='b')
         plt.scatter(transformed_indexs[2][0], transformed_indexs[2][1], c='b')
         plt.scatter(bresenham_line[:,0], bresenham_line[:,1], c='r', s=1)
-        plt.scatter(mean_index[2], mean_index[0], c='r')
+        # plt.scatter(mean_index[0], mean_index[2], c='r')
         plt.show()
         
         plt.title('Binary image')
@@ -350,12 +365,38 @@ def getCuspHeightEH(points, mid_cusp_point):
     return cusp_height
 
     
-      
+def getMorphometry(input_image, points):
+    R = points[0,:]
+    L = points[1,:]
+    N = points[2,:]
+
+    RLC = points[3,:]
+    RNC = points[4,:]
+    LNC = points[5,:]
+
+    meanCommisure = (RLC + RNC + LNC) / 3
+    meanCusp = (R + L + N) / 3
+    
+    contourLengthL = getContourLength(input_image, [RLC,L,LNC], show_steps=False)
+    contourLengthN = getContourLength(input_image, [LNC,N,RNC], show_steps=False)
+    contourLengthR = getContourLength(input_image, [RNC,R,RLC], show_steps=False)
+
+    cuspHeightGHL, mid_pointL = getCuspHeightGH(input_image, [L,meanCommisure,meanCusp], show_steps=False)
+    cuspHeightGHN, mid_pointN = getCuspHeightGH(input_image, [R,meanCommisure,meanCusp], show_steps=False)
+    cuspHeightGHR, mid_pointR = getCuspHeightGH(input_image, [N,meanCommisure,meanCusp], show_steps=False)
+
+    cuspHeightEHL = getCuspHeightEH([L,R,N], mid_pointL)
+    cuspHeightEHR = getCuspHeightEH([R,L,N], mid_pointR)
+    cuspHeightEHN = getCuspHeightEH([N,R,L], mid_pointN)
+
+    Radius = getCircumscribedCircle([R,L,N])
+    
+    return contourLengthL, contourLengthN, contourLengthR, cuspHeightGHL, cuspHeightGHN, cuspHeightGHR, cuspHeightEHL, cuspHeightEHN, cuspHeightEHR, Radius
 
 
 #%% Load image and landmark test
 # load the model
-idx = 100
+idx = 5
 # model = SCN(in_channels=1, num_classes=6)
 # model.load_state_dict(torch.load('/root/models/13-11-2023_18-16/model130.ckpt'))
 
@@ -399,9 +440,9 @@ contourLengthL = getContourLength(image, [RLC,L,LNC], show_steps=False)
 contourLengthN = getContourLength(image, [LNC,N,RNC], show_steps=False)
 contourLengthR = getContourLength(image, [RNC,R,RLC], show_steps=False)
 
-cuspHeightGHL, mid_pointL = getCuspHeightGH(image, [L,meanCommisure,meanCusp], show_steps=False)
-cuspHeightGHN, mid_pointN = getCuspHeightGH(image, [R,meanCommisure,meanCusp], show_steps=False)
-cuspHeightGHR, mid_pointR = getCuspHeightGH(image, [N,meanCommisure,meanCusp], show_steps=False)
+cuspHeightGHL, mid_pointL = getCuspHeightGH(image, [L,meanCommisure,meanCusp], show_steps=True)
+cuspHeightGHN, mid_pointN = getCuspHeightGH(image, [R,meanCommisure,meanCusp], show_steps=True)
+cuspHeightGHR, mid_pointR = getCuspHeightGH(image, [N,meanCommisure,meanCusp], show_steps=True)
 
 
 cuspHeightEHL = getCuspHeightEH([L,R,N], mid_pointL)
@@ -422,6 +463,24 @@ print('Cusp height EH R: {:.2f}'.format(cuspHeightEHR))
 
 print('bazal ring circumference: {:.2f}'.format(R))
 
-#%% iterate through foldre and save results to csv
+#%% iterate through foldrer and save results to csv
+# create csv
+pathToImagesFolder = "/root/data/dataOrigin/"
+pathToLandMarks = "/root/data/LandmarkCoordinates.csv"
+morphometry_array = pd.DataFrame(columns=['id', 'Contour length L', 'Contour length N', 'Contour length R', 'Cusp height GH L', 'Cusp height GH N', 'Cusp height GH R', 'Cusp height EH L', 'Cusp height EH N', 'Cusp height EH R', 'bazal ring circumference'])
+landmarks_array = pd.read_csv(pathToLandMarks, header=None)
+landmarks_array = landmarks_array.to_numpy()
 
+for i in range(landmarks_array.shape[0]):
+    index = int(landmarks_array[i,0])
+    print(i, index)
+    image = sitk.ReadImage(pathToImagesFolder+str(index)+'.nii.gz')
+    landmarks = landmarks_array[i,1:].reshape(6,3)
+    morphometry = getMorphometry(image, landmarks)
+    
+    # save to csv
+    morphometry_array.loc[i] = [index, morphometry[0], morphometry[1], morphometry[2], morphometry[3], morphometry[4], morphometry[5], morphometry[6], morphometry[7], morphometry[8], morphometry[9]]
 
+    
+#%%
+print(morphometry_array)
