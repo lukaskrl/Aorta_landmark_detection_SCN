@@ -2,10 +2,11 @@
 import SimpleITK as sitk
 import numpy as np
 import matplotlib.pyplot as plt
+from pytest import skip
+from requests import get
 from CNNTesting.dataset import *
 from CNNTesting.parts import *
 import math
-import numpy as np
 #%% functions
 
 def getContourPoints(point_start, point_end, contour_array, search_radious = 10):
@@ -38,12 +39,12 @@ def getContourPoints(point_start, point_end, contour_array, search_radious = 10)
 
 def findClosestPoint(point_start, contour_array):
     min_distance = 100000
-    mid_cusp_insertion_point = []
+    closest_point = []
     for point in contour_array:
         if math.dist(point,point_start) < min_distance:
             min_distance = math.dist(point,point_start)
-            mid_cusp_insertion_point = point
-    return mid_cusp_insertion_point
+            closest_point = point
+    return closest_point
     
 
 def bresenhamLine(x0, y0, x1, y1):
@@ -88,7 +89,7 @@ def getCircumscribedCircle(points):
     
     return circumference 
 
-def rotateImageToPlane(input_image, points, normalize = False):
+def rotateImageToPlane(input_image, points, normalize = False, filter = False, sigma=1.0):
     normal = np.cross(points[0]-points[1], points[0]-points[2])
     normal = normal / np.linalg.norm(normal)
     # calculate axis  and angle for versor rotation
@@ -105,7 +106,9 @@ def rotateImageToPlane(input_image, points, normalize = False):
     # normalize image
     if normalize:
         resampled_image = sitk.Normalize(resampled_image)
-    
+        
+    if filter:
+        resampled_image = sitk.SmoothingRecursiveGaussian(resampled_image, sigma)
     
     transformed_indexs = []
     for point in points:
@@ -114,37 +117,50 @@ def rotateImageToPlane(input_image, points, normalize = False):
         
     return  resampled_image, transformed_indexs, versor
     
-def getKernelValuesAroundIndex(image2D, index):  
-    return [image2D[int(index[0]), int(index[1])],
-            image2D[int(index[0]) -1, int(index[1])],
-            image2D[int(index[0]) + 1, int(index[1])],
-            image2D[int(index[0]), int(index[1]) -1],
-            image2D[int(index[0]), int(index[1]) +1],
-            image2D[int(index[0]) -1, int(index[1]) -1],
-            image2D[int(index[0]) -1, int(index[1]) +1],
-            image2D[int(index[0]) +1, int(index[1]) -1],
-            image2D[int(index[0]) +1, int(index[1]) +1]]  
+def getKernelValuesAroundIndex(image2D, index, windows_size = 3):  
+    row, col = index.astype(int)
+
+    # Extract the window around the specified point
+    window = image2D[row - windows_size : row + windows_size + 1, col - windows_size : col + windows_size + 1]
+
+    return window
     
-       
+
+def extractIslandAroundIndex(image2D, seed_point, connectivity = 3):
+    connected_components = sitk.ConnectedComponent(image, connectivity)
+
+    # Step 2: Create binary mask for the connected component containing the seed point
+    seed_label = connected_components[seed_point]
+    binary_mask = (connected_components == seed_label)
+
+    # Step 3: Use the binary mask to extract the region of interest
+    extracted_region = sitk.Mask(image, binary_mask)
+
+    return extracted_region
+  
 def getContourLength(input_image, points, show_steps=False):
 
-    resampled_image, transformed_indexs, versor = rotateImageToPlane(input_image, points)
+    resampled_image, transformed_indexs, versor = rotateImageToPlane(input_image, points, normalize=True)
         
     image_slice = sitk.GetArrayFromImage(resampled_image)[:,transformed_indexs[0][1],:]
     itk_image_slice = sitk.GetImageFromArray(image_slice)       
     
     # get mean coordinates of the transformed indexes for binary thresholding
-    mean_index = np.flip(np.mean(transformed_indexs, axis=0))
+    mean_index = np.round(np.flip(np.mean(transformed_indexs, axis=0)))
     
-    mean_values = getKernelValuesAroundIndex(image_slice, mean_index[[0,2]])
+    # island = extractIslandAroundIndex(itk_image_slice, mean_index)
+    # plt.imshow(sitk.GetArrayFromImage(island), cmap='gray')
+    # plt.show()
+    
+    mean_values = getKernelValuesAroundIndex(image_slice, mean_index[[0,2]], windows_size=10)
     
     mean_value = np.median(mean_values)
-    max_value = np.max(image_slice)
-    min_value = np.min(image_slice)
-    offset = (max_value - min_value)*0.05
+    max_value = np.max(mean_values)
+    min_value = np.min(mean_values)
     
-    upper_binary_treshold = mean_value + offset
-    lower_binary_treshold = mean_value - offset
+    # upper threshold doesnt matter for aortic valves, the valve is the brightest part of the image
+    upper_binary_treshold = max_value*2
+    lower_binary_treshold = min_value*1.2
     
     # binary treshold image filter
     binary_filter = sitk.BinaryThresholdImageFilter()
@@ -153,23 +169,25 @@ def getContourLength(input_image, points, show_steps=False):
     binary_filter.SetInsideValue(1)
     binary_filter.SetOutsideValue(0)
     binary_image = binary_filter.Execute(itk_image_slice)
- 
-    radius = 2
+
+    radius = 1
     
-    erode_filter = sitk.BinaryErodeImageFilter()
-    erode_filter.SetKernelRadius(radius)
-    erode_filter.SetForegroundValue(1)
-    erode_filter.SetBackgroundValue(0)
-    erode_image = erode_filter.Execute(binary_image)
+    
     
     dilate_filter = sitk.BinaryDilateImageFilter()
     dilate_filter.SetKernelRadius(radius)
     dilate_filter.SetForegroundValue(1)
     dilate_filter.SetBackgroundValue(0)
-    dilate_image = dilate_filter.Execute(erode_image)
+    dilate_image = dilate_filter.Execute(binary_image)
+    
+    erode_filter = sitk.BinaryErodeImageFilter()
+    erode_filter.SetKernelRadius(radius)
+    erode_filter.SetForegroundValue(1)
+    erode_filter.SetBackgroundValue(0)
+    erode_image = erode_filter.Execute(dilate_image)
 
     contour_filter = sitk.BinaryContourImageFilter()
-    contour_image = contour_filter.Execute(dilate_image)
+    contour_image = contour_filter.Execute(erode_image)
     
     contour_array = np.array(np.where(sitk.GetArrayFromImage(contour_image) == 1)).T
     # switch columns becouse sitk.GerArrayFromImage returns (z,y,x) and we need (x,y,z)
@@ -241,7 +259,7 @@ def getContourLength(input_image, points, show_steps=False):
      
 def getCuspHeightGH(input_image, points, show_steps=False): 
 
-    resampled_image, transformed_indexs, versor = rotateImageToPlane(input_image, points, normalize=True)
+    resampled_image, transformed_indexs, versor = rotateImageToPlane(input_image, points, normalize=True, filter = True, sigma=0.5)
    
     image_slice = sitk.GetArrayFromImage(resampled_image)[:,transformed_indexs[0][1],:]
     # image_slice in z x space
@@ -250,28 +268,19 @@ def getCuspHeightGH(input_image, points, show_steps=False):
     
     # itk back to x z space
     mean_index = np.flip(transformed_indexs[1])
-    print(mean_index)
     transformed_indexs = np.delete(transformed_indexs, 1, axis=1)
 
     # slice in z x space, but index now also fliped to z x
-    mean_values = getKernelValuesAroundIndex(image_slice, mean_index[[0,2]])
+    mean_values = getKernelValuesAroundIndex(image_slice, mean_index[[0,2]], windows_size=10)    
     
-    # mean_value = np.mean(mean_values)
-    # max_value = np.max(image_slice)
-    # min_value = np.min(image_slice)
-    # offset = (max_value - min_value)*0.05
-    # print(mean_value, max_value, min_value, offset)
-    
+    # plt.imshow(mean_values, cmap='gray')
+    # plt.show()
     mean_value = np.median(mean_values)
     max_value = np.max(mean_values)
     min_value = np.min(mean_values)
-    offset = (max_value - min_value)*0.05
-    print(mean_value, max_value, min_value, offset)
     
     upper_binary_treshold = max_value*2
-    lower_binary_treshold = min_value*0.9
-    # upper_binary_treshold = mean_value + offset
-    # lower_binary_treshold = mean_value - offset
+    lower_binary_treshold = min_value*1
     
     # binary treshold image filter
     binary_filter = sitk.BinaryThresholdImageFilter()
@@ -280,19 +289,28 @@ def getCuspHeightGH(input_image, points, show_steps=False):
     binary_filter.SetInsideValue(1)
     binary_filter.SetOutsideValue(0)
     binary_image = binary_filter.Execute(itk_image_slice)
- 
+
     radius = 1
-    dilate_filter = sitk.BinaryDilateImageFilter()
-    dilate_filter.SetKernelRadius(radius)
-    dilate_filter.SetForegroundValue(1)
-    dilate_filter.SetBackgroundValue(0)
-    dilate_image = dilate_filter.Execute(binary_image)
-    
     erode_filter = sitk.BinaryErodeImageFilter()
     erode_filter.SetKernelRadius(radius)
     erode_filter.SetForegroundValue(1)
     erode_filter.SetBackgroundValue(0)
+    erode_image = erode_filter.Execute(binary_image)
+ 
+    dilate_filter = sitk.BinaryDilateImageFilter()
+    dilate_filter.SetKernelRadius(radius*2)
+    dilate_filter.SetForegroundValue(1)
+    dilate_filter.SetBackgroundValue(0)
+    dilate_image = dilate_filter.Execute(erode_image)
+    
+    erode_filter.SetKernelRadius(radius)
+    erode_filter.SetForegroundValue(1)
+    erode_filter.SetBackgroundValue(0)
     erode_image = erode_filter.Execute(dilate_image)
+    
+    # binaryFillHoleFilter = sitk.BinaryFillholeImageFilter()
+    # binaryFillHoleFilter.SetForegroundValue(1)
+    # erode_image = binaryFillHoleFilter.Execute(binary_image)
     
     
     filtered_image_array = sitk.GetArrayFromImage(erode_image)
@@ -308,23 +326,15 @@ def getCuspHeightGH(input_image, points, show_steps=False):
     min_distance = 100000
     for point in bresenham_line:
         # turn points around since sitk.array flips arrays
+        # check neoughbouring points to point in filtered_image_array, if any has value == 0
+        
+        
         if (filtered_image_array[point[1], point[0]] == 0):
             test_line_point.append(point)
             if math.dist(point, transformed_indexs[1]) < min_distance:
                 min_distance = math.dist(point, transformed_indexs[1])
                 mid_cusp_insertion_point = point
-                
-    # insertion point is in x z space, TODO neki narobe
-    mid_cusp_insertion_point = [int(mid_cusp_insertion_point[0]), int(mean_index[1]), int(mid_cusp_insertion_point[1])]
-    mid_cusp_insertion_point_world = input_image.TransformIndexToPhysicalPoint(mid_cusp_insertion_point)
-    
-    # transform point back before rotation
-    mid_cusp_insertion_point_world = versor.GetInverse().TransformPoint(mid_cusp_insertion_point_world)
-    
-    # calculate distance from mid_cusp_insertion_point to transformed_indexs[0]
-    cusp_height = math.dist(mid_cusp_insertion_point_world, points[0])
-    test_height = math.dist(mid_cusp_insertion_point_world, points[2])
-
+       
     if show_steps:
         plt.title('image slice')
         plt.imshow(image_slice, cmap='gray')
@@ -341,10 +351,27 @@ def getCuspHeightGH(input_image, points, show_steps=False):
 
         plt.title('dilate image')
         plt.imshow(sitk.GetArrayFromImage(dilate_image), cmap='gray')
-        plt.show()
+        plt.show() 
         
         plt.title('erode image')
         plt.imshow(sitk.GetArrayFromImage(erode_image), cmap='gray')
+        plt.show() 
+                
+    # insertion point is in x z space, TODO neki narobe
+    mid_cusp_insertion_point = [int(mid_cusp_insertion_point[0]), int(mean_index[1]), int(mid_cusp_insertion_point[1])]
+    mid_cusp_insertion_point_world = input_image.TransformIndexToPhysicalPoint(mid_cusp_insertion_point)
+    
+    # transform point back before rotation
+    mid_cusp_insertion_point_world = versor.GetInverse().TransformPoint(mid_cusp_insertion_point_world)
+    
+    # calculate distance from mid_cusp_insertion_point to transformed_indexs[0]
+    cusp_height = math.dist(mid_cusp_insertion_point_world, points[0])
+    test_height = math.dist(mid_cusp_insertion_point_world, points[2])
+
+    if show_steps:
+        
+        plt.title('final image points')
+        plt.imshow(image_slice, cmap='gray')
         plt.scatter(transformed_indexs[0][0], transformed_indexs[0][1], c='r')
         plt.scatter(transformed_indexs[1][0], transformed_indexs[1][1], c='r')
         plt.scatter(transformed_indexs[2][0], transformed_indexs[2][1], c='r')
@@ -354,6 +381,7 @@ def getCuspHeightGH(input_image, points, show_steps=False):
 
         
     return cusp_height, mid_cusp_insertion_point_world
+    # return 0, 0
         
 def getCuspHeightEH(points, mid_cusp_point):
     # calculate plane norm of points
@@ -396,7 +424,7 @@ def getMorphometry(input_image, points):
 
 #%% Load image and landmark test
 # load the model
-idx = 5
+idx = 10
 # model = SCN(in_channels=1, num_classes=6)
 # model.load_state_dict(torch.load('/root/models/13-11-2023_18-16/model130.ckpt'))
 
@@ -474,6 +502,8 @@ landmarks_array = landmarks_array.to_numpy()
 for i in range(landmarks_array.shape[0]):
     index = int(landmarks_array[i,0])
     print(i, index)
+    if index > 125:
+        continue
     image = sitk.ReadImage(pathToImagesFolder+str(index)+'.nii.gz')
     landmarks = landmarks_array[i,1:].reshape(6,3)
     morphometry = getMorphometry(image, landmarks)
