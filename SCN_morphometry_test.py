@@ -108,7 +108,8 @@ def rotateImageToPlane(input_image, points, normalize = False, filter = False, s
         resampled_image = sitk.Normalize(resampled_image)
         
     if filter:
-        resampled_image = sitk.SmoothingRecursiveGaussian(resampled_image, sigma)
+        # resampled_image = sitk.SmoothingRecursiveGaussian(resampled_image, sigma)
+        resampled_image = sitk.Median(resampled_image, [3,3,3])
     
     transformed_indexs = []
     for point in points:
@@ -140,7 +141,7 @@ def extractIslandAroundIndex(image2D, seed_point, connectivity = 3):
   
 def getContourLength(input_image, points, show_steps=False):
 
-    resampled_image, transformed_indexs, versor = rotateImageToPlane(input_image, points, normalize=True)
+    resampled_image, transformed_indexs, versor = rotateImageToPlane(input_image, points, normalize=False, filter = True, sigma=0.5)
         
     image_slice = sitk.GetArrayFromImage(resampled_image)[:,transformed_indexs[0][1],:]
     itk_image_slice = sitk.GetImageFromArray(image_slice)       
@@ -160,7 +161,7 @@ def getContourLength(input_image, points, show_steps=False):
     
     # upper threshold doesnt matter for aortic valves, the valve is the brightest part of the image
     upper_binary_treshold = max_value*2
-    lower_binary_treshold = min_value*1.2
+    lower_binary_treshold = min_value*0.9
     
     # binary treshold image filter
     binary_filter = sitk.BinaryThresholdImageFilter()
@@ -422,74 +423,74 @@ def getMorphometry(input_image, points):
     return contourLengthL, contourLengthN, contourLengthR, cuspHeightGHL, cuspHeightGHN, cuspHeightGHR, cuspHeightEHL, cuspHeightEHN, cuspHeightEHR, Radius
 
 
-#%% Load image and landmark test
-# load the model
-idx = 10
-# model = SCN(in_channels=1, num_classes=6)
-# model.load_state_dict(torch.load('/root/models/13-11-2023_18-16/model130.ckpt'))
+# #%% Load image and landmark test
+# # load the model
+# idx = 112
+# # model = SCN(in_channels=1, num_classes=6)
+# # model.load_state_dict(torch.load('/root/models/13-11-2023_18-16/model130.ckpt'))
 
-# load image and points
-pathToImage = "/root/data/dataOrigin/"+str(idx)+".nii.gz"
-pathToPoints = "/root/data/LandmarkCoordinates.csv"
-image = sitk.ReadImage(pathToImage)   
+# # load image and points
+# pathToImage = "/root/data/dataOrigin/"+str(idx)+".nii.gz"
+# pathToPoints = "/root/data/LandmarkCoordinates.csv"
+# image = sitk.ReadImage(pathToImage)   
 
-# load points
-landmarks_frame = pd.read_csv(pathToPoints, header=None)
-landmarks_array = landmarks_frame.to_numpy()
-index_points = np.where(landmarks_array[:, 0] == idx)
-landmarks_array = landmarks_array[index_points, :].squeeze()  
-landmarks_array = landmarks_array[1:]
-landmarks_array = landmarks_array.reshape(6, 3)
+# # load points
+# landmarks_frame = pd.read_csv(pathToPoints, header=None)
+# landmarks_array = landmarks_frame.to_numpy()
+# index_points = np.where(landmarks_array[:, 0] == idx)
+# landmarks_array = landmarks_array[index_points, :].squeeze()  
+# landmarks_array = landmarks_array[1:]
+# landmarks_array = landmarks_array.reshape(6, 3)
 
-landmark_index = []
-for i in range(len(landmarks_array)):
-    point = landmarks_array[i,:]
-    landmark_index.append(
-        image.TransformPhysicalPointToIndex(point))
+# landmark_index = []
+# for i in range(len(landmarks_array)):
+#     point = landmarks_array[i,:]
+#     landmark_index.append(
+#         image.TransformPhysicalPointToIndex(point))
 
-point = 2
-plt.imshow(sitk.GetArrayFromImage(image)[:,landmark_index[point][1],:], cmap='gray')
-plt.scatter(landmark_index[point][0], landmark_index[point][2], c='r')
-
-
-#%% Pipeline for morphometry extraction 1 image
-R = landmarks_array[0,:]
-L = landmarks_array[1,:]
-N = landmarks_array[2,:]
-
-RLC = landmarks_array[3,:]
-RNC = landmarks_array[4,:]
-LNC = landmarks_array[5,:]
-
-meanCommisure = (RLC + RNC + LNC) / 3
-meanCusp = (R + L + N) / 3
-
-contourLengthL = getContourLength(image, [RLC,L,LNC], show_steps=False)
-contourLengthN = getContourLength(image, [LNC,N,RNC], show_steps=False)
-contourLengthR = getContourLength(image, [RNC,R,RLC], show_steps=False)
-
-cuspHeightGHL, mid_pointL = getCuspHeightGH(image, [L,meanCommisure,meanCusp], show_steps=True)
-cuspHeightGHN, mid_pointN = getCuspHeightGH(image, [R,meanCommisure,meanCusp], show_steps=True)
-cuspHeightGHR, mid_pointR = getCuspHeightGH(image, [N,meanCommisure,meanCusp], show_steps=True)
+# point = 2
+# plt.imshow(sitk.GetArrayFromImage(image)[:,landmark_index[point][1],:], cmap='gray')
+# plt.scatter(landmark_index[point][0], landmark_index[point][2], c='r')
 
 
-cuspHeightEHL = getCuspHeightEH([L,R,N], mid_pointL)
-cuspHeightEHR = getCuspHeightEH([R,L,N], mid_pointR)
-cuspHeightEHN = getCuspHeightEH([N,R,L], mid_pointN)
+# #%% Pipeline for morphometry extraction 1 image
+# R = landmarks_array[0,:]
+# L = landmarks_array[1,:]
+# N = landmarks_array[2,:]
 
-R = getCircumscribedCircle([R,L,N])
+# RLC = landmarks_array[3,:]
+# RNC = landmarks_array[4,:]
+# LNC = landmarks_array[5,:]
 
-print('Contour length L: {:.2f}'.format(contourLengthL))
-print('Contour length N: {:.2f}'.format(contourLengthN))
-print('Contour length R: {:.2f}'.format(contourLengthR))
-print('Cusp height GH L: {:.2f}'.format(cuspHeightGHL))
-print('Cusp height GH N: {:.2f}'.format(cuspHeightGHN))
-print('Cusp height GH R: {:.2f}'.format(cuspHeightGHR))
-print('Cusp height EH L: {:.2f}'.format(cuspHeightEHL))
-print('Cusp height EH N: {:.2f}'.format(cuspHeightEHN))
-print('Cusp height EH R: {:.2f}'.format(cuspHeightEHR))
+# meanCommisure = (RLC + RNC + LNC) / 3
+# meanCusp = (R + L + N) / 3
 
-print('bazal ring circumference: {:.2f}'.format(R))
+# contourLengthL = getContourLength(image, [RLC,L,LNC], show_steps=True)
+# contourLengthN = getContourLength(image, [LNC,N,RNC], show_steps=True)
+# contourLengthR = getContourLength(image, [RNC,R,RLC], show_steps=True)
+
+# cuspHeightGHL, mid_pointL = getCuspHeightGH(image, [L,meanCommisure,meanCusp], show_steps=True)
+# cuspHeightGHN, mid_pointN = getCuspHeightGH(image, [R,meanCommisure,meanCusp], show_steps=True)
+# cuspHeightGHR, mid_pointR = getCuspHeightGH(image, [N,meanCommisure,meanCusp], show_steps=True)
+
+
+# cuspHeightEHL = getCuspHeightEH([L,R,N], mid_pointL)
+# cuspHeightEHR = getCuspHeightEH([R,L,N], mid_pointR)
+# cuspHeightEHN = getCuspHeightEH([N,R,L], mid_pointN)
+
+# R = getCircumscribedCircle([R,L,N])
+
+# print('Contour length L: {:.2f}'.format(contourLengthL))
+# print('Contour length N: {:.2f}'.format(contourLengthN))
+# print('Contour length R: {:.2f}'.format(contourLengthR))
+# print('Cusp height GH L: {:.2f}'.format(cuspHeightGHL))
+# print('Cusp height GH N: {:.2f}'.format(cuspHeightGHN))
+# print('Cusp height GH R: {:.2f}'.format(cuspHeightGHR))
+# print('Cusp height EH L: {:.2f}'.format(cuspHeightEHL))
+# print('Cusp height EH N: {:.2f}'.format(cuspHeightEHN))
+# print('Cusp height EH R: {:.2f}'.format(cuspHeightEHR))
+
+# print('bazal ring circumference: {:.2f}'.format(R))
 
 #%% iterate through foldrer and save results to csv
 # create csv
@@ -514,3 +515,5 @@ for i in range(landmarks_array.shape[0]):
     
 #%%
 print(morphometry_array)
+# save to csv
+morphometry_array.to_csv('/root/data/morphometry.csv', index=False)
